@@ -1,9 +1,0 @@
-repositories:
-  odoo:
-    path: vendor/odoo
-    url: git@github.com:odoo/odoo.git
-    branch: 12.0
-  oca-web:
-    path: vendor/oca/web
-    url: git@github.com:OCA/web.git
-    branch: 12.0

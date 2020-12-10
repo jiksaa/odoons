@@ -1,0 +1,25 @@
+odoons:
+  odoo:
+    version: 12.0
+    url: https://github.com/odoo/odoo
+    path: vendor/odoo
+    options:
+      data_dir: data
+      # ... various odoo.cfg option
+
+  options:
+    install-odoo-command: true
+    apply-requirements: true
+    config-template: odoo.cfg.template
+
+  addons:
+    oca-web:
+      type: git
+      path: vendor/oca/web
+      url: git@github.com:OCA/web.git
+      branch: 12.0
+
+    local:
+      type: local
+      path: src
+
