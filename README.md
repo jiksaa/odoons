@@ -99,7 +99,7 @@ optional arguments:
 
 ## Basic Project Setup
 
-The [example](example) directory contains a basic project template using Odoons. 
+The [example/project_structure](example) directory contains a basic project template using Odoons. 
 It contains:
 
 - An Odoons YAML file
