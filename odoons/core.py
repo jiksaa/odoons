@@ -3,11 +3,12 @@ import yaml
 import shutil
 import argparse
 import subprocess
-from configparser import ConfigParser
+from configparser import ConfigParser, ExtendedInterpolation
 
 
 ACTION_INIT = 'init'
 ACTION_INSTALL = 'install'
+ACTION_MIGRATE = 'migrate'
 ACTION_UPDATE = 'update'
 ACTION_RESET = 'reset'
 ACTION_ADDONS = 'addons'
@@ -46,6 +47,15 @@ class Odoons:
         # Install command arguments
         self._install_parser = self._command_parser.add_parser(ACTION_INSTALL)
         self._install_parser.set_defaults(execute=self.install)
+
+        # Migrate command arguments
+        self._migrate_parser = self._command_parser.add_parser(ACTION_MIGRATE)
+        self._migrate_parser.add_argument(
+            '-b',
+            '--buildout-file',
+            help='Odoo buildout file to migrate',
+        )
+        self._migrate_parser.set_defaults(execute=self.migrate)
 
         # Update command arguments
         self._update_parser = self._command_parser.add_parser(ACTION_UPDATE)
@@ -155,6 +165,106 @@ class Odoons:
         for name, conf in self._addons.items():
             pip_install(conf['path'])
 
+    @staticmethod
+    def _get_config_parser():
+        return ConfigParser(interpolation=ExtendedInterpolation(), strict=False)
+
+    def _get_buildout_file_hierarchy(self, buildout_file, data):
+        """
+        Build the buildout file hiearchy for top to bottom
+
+        :param buildout_file: starting buildout file path
+        :param data: list of buildout file hierarchy (recusion accumulator)
+        :return: list(str)
+        """
+        data = [buildout_file] + data
+        buildout_parser = self._get_config_parser()
+        buildout_parser.read(buildout_file)
+        if not buildout_parser.has_section('buildout'):
+            raise RuntimeError('Invalid buildout file: missing buildout section')
+        buildout_section = dict(buildout_parser.items('buildout'))
+        if 'extends' in buildout_section:
+            extend_file = os.path.join(os.path.dirname(buildout_file), buildout_section['extends'])
+            return self._get_buildout_file_hierarchy(extend_file, data)
+
+        return data
+
+    def migrate(self):
+        """
+        Migrate the given buildout file to an YAML Odoons compatible file
+
+        :return: None
+        """
+        extends_list = self._get_buildout_file_hierarchy(self._args.buildout_file, [])
+        odoo_config = {}
+        # Read buildout file hierarchy from top to bottom
+        for file in extends_list:
+            file_parser = self._get_config_parser()
+            file_parser.read(file)
+            if file_parser.has_section('odoo'):
+                odoo_config.update(file_parser.items('odoo'))
+
+        odoons_data = {'odoons': {}}
+
+        # Odoo YAML section
+        version = odoo_config.get('version', None)
+        if not version:
+            raise RuntimeError('Unidentified Odoo version: check version key on buildout file')
+        splited_value = version.split(' ')
+        odoons_data['odoons']['odoo'] = {
+            'version': splited_value[3],
+            'url': splited_value[1],
+            'path': 'parts/' + splited_value[2] # Hardcoding parts: ts not obvious where it is defined on buildout file
+        }
+
+        # Odoo - options YAML section
+        options = {}
+        options_prefix = 'options.'
+        for key, value in odoo_config.items():
+            if key.startswith(options_prefix):
+                options[key[len(options_prefix):]] = value
+        if options:
+            odoons_data['odoons']['odoo']['options'] = options
+
+        # Options YAML section
+        odoons_data['odoons']['options'] = {
+            'install-odoo-command': True,
+            'apply-requirements': True,
+            # TODO: maybe add config template generation ?
+        }
+
+        # Addons YAML section
+        addons = odoo_config.get('addons', None)
+        if not addons:
+            raise RuntimeError('No addons defined on buildout file. Does migrate the file still useful ?')
+        buildout_addons_list = addons.split('\n')
+        addons = {}
+        for buildout_addons in buildout_addons_list:
+            items = buildout_addons.split(' ')
+            if items[0] == 'git' and len(items) >= 4:
+                # [ 'git', URL, PATH, BRANCH, [STANDALONE] ]
+                d = {'type': 'git', 'path': items[2], 'url': items[1], 'branch': items[3]}
+                try:
+                    prefix = 'group='
+                    if items[4].startswith(prefix):
+                        d['path'] = os.path.join(d['path'], items[4][len(prefix):])
+                    print('Unknown addons definition: ', items[4])
+                except IndexError:
+                    pass
+                name = os.path.basename(os.path.normpath(d['path']))
+                addons[name] = d
+                continue
+            if items[0] == 'local' and len(items) == 2:
+                # [ 'local', PATH ]
+                d = {'type': 'local', 'path': items[1]}
+                name = os.path.basename(os.path.normpath(d['path']))
+                addons[name] = d
+                continue
+        odoons_data['odoons']['addons'] = addons
+
+        with open(self._args.file, 'w') as outfile:
+            yaml.dump(odoons_data, outfile, default_flow_style=False)
+
     def update(self):
         """
         Action method responsible of the ACTION_UPDATE sub command
@@ -227,7 +337,8 @@ class Odoons:
         else:
             self._args = self._parser.parse_args()
 
-        self._load_file()
+        if self._args.execute != self.migrate:
+            self._load_file()
         self._args.execute()
 
 

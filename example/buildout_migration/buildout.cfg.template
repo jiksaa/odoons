@@ -1,0 +1,43 @@
+[buildout]
+parts = directories_setup odoo
+versions = versions
+find-links =
+
+extensions = gp.vcsdevelop
+develop-dir = ./develop-src
+vcs-extend-develop = git+https://github.com/anybox/anybox.recipe.odoo#egg=anybox.recipe.odoo
+vcs-update = True
+
+[directories_setup]
+recipe = z3c.recipe.mkdir
+paths = ${buildout:parts-directory}/community
+
+[odoo]
+recipe = anybox.recipe.odoo:server
+version = git https://github.com/odoo/odoo.git odoo 12.0 depth=1
+keep-addons-order = True
+apply-requirements-file = True
+
+addons = local ./project_addons/
+         git git@github.com:odoo/enterprise.git parts/odoo/addons-enterprise 12.0
+         git https://github.com/OCA/mis-builder.git parts/community/addons-oca-mis-builder 12.0
+         git https://github.com/OCA/reporting-engine.git parts/community/addons-oca-reporting-engine 12.0
+         git https://github.com/OCA/web.git parts/community/addons-oca-web 12.0
+         git https://github.com/OCA/server-ux.git parts/community/addons-oca-server-ux 12.0
+         git https://github.com/OCA/server-auth.git parts/community/addons-oca-server-auth 12.0
+         git https://github.com/OCA/server-tools.git parts/community/addons-oca-server-tools 12.0
+         git https://github.com/OCA/connector.git parts/community/addons-oca-connector 12.0
+         git https://github.com/OCA/queue.git parts/community/addons-oca-queue 12.0
+         git https://github.com/OCA/account-reconcile.git parts/community/account-reconcile 12.0
+         git https://github.com/camptocamp/odoo-cloud-platform parts/community/odoo-cloud-platform 12.0
+         git https://github.com/OCA/partner-contact.git parts/community/addons-oca-partner-contact 12.0
+         git https://github.com/OCA/account-invoicing.git parts/community/addons-oca-account-invoicing 12.0
+         git https://github.com/Navybits/kanban_draggable.git parts/community/kanban_draggable 11.0
+         git https://github.com/gityopie/odoo-addons.git parts/community/addons-gityopie 12.0
+         git https://github.com/Mint-System/Odoo-App-Auth-OAuth-Keycloak.git parts/community/auth_oauth_keycloak master group=addons-keycloak
+         git https://github.com/OCA/rest-framework.git parts/community/rest-framework 12.0
+
+[versions]
+Babel=2.3.4
+chardet=3.0.4
+

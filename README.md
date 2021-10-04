@@ -10,6 +10,7 @@ following features:
 - Reset addons.
 - Install Python requirements.
 - Build Odoo configuration file.
+- Migrate Odoo buildout file(s) to Odoons structure
 
 
 ## Installation
@@ -87,6 +88,7 @@ COMMAND:
 
 init        Initialize Odoo and addons
 install     Install or update python dependencies
+migrate     Migrate buildout file(s) to Odoons
 update      Update Odoo and addons sources code 
 addons      List additional addons
 config      Generate Odoo configuration file with proper addons_path
