@@ -18,10 +18,70 @@ DEFAULT_YAML_FILE = 'odoons.yml'
 DEFAULT_ODOO_URL = 'https://github.com/odoo/odoo'
 
 
+class Git:
+    def __init__(self, path, url, branch=None, commit=None):
+        self._path = path
+        self._url = url
+        self._branch = str(branch) if branch else None
+        self._commit = str(commit) if commit else None
+
+    def is_git_directory(self):
+        command = ['git', '-C', self._path, 'status']
+        return subprocess.call(command, stderr=subprocess.STDOUT,stdout=open(os.devnull, 'w')) == 0
+
+    def is_frozen(self):
+        return bool(self._commit)
+
+    def clone(self):
+        if self.is_git_directory():
+            return self.update()
+
+        command = ['git', 'clone']
+
+        if self._branch:
+            command += ['-b', self._branch]
+
+        if not self.is_frozen():
+            command += ['--depth', '1']
+
+        command += [self._url, self._path]
+        print('Running command:', command)
+        sp = subprocess.Popen(command)
+        sp.wait()
+
+        if not self.is_frozen() or sp.returncode != 0:
+            return sp.returncode
+
+        print('Repository is frozen to: {}'.format(self._commit))
+        return self.checkout()
+
+    def update(self):
+        if not self.is_git_directory():
+            return self.clone()
+
+        path = os.path.abspath(self._path)
+        git_command = ['git', '-C', path]
+        subprocess.run(git_command + ['fetch', 'origin'])
+        if not self.is_frozen():
+            return subprocess.run(git_command + ['reset', '--hard', 'origin/' + self._branch])
+
+        return self.checkout()
+
+    def checkout(self):
+        if not self.is_git_directory():
+            return self.clone()
+        checkout_command = ['git', '-C', self._path, 'checkout', self._commit]
+        print('Running command:', checkout_command)
+        sp = subprocess.Popen(checkout_command)
+        sp.wait()
+        return sp.returncode
+
+
 class Odoons:
     def __init__(self):
         self.__setup_parsers()
         self.odoons_file = None
+        self._args = None
 
     def __setup_parsers(self):
         # Top level argument
@@ -105,18 +165,27 @@ class Odoons:
         abspath = os.path.abspath(self._odoo['path'])
         url = self._odoo.get('url', DEFAULT_ODOO_URL)
         branch = self._odoo['version']
-        git_init(abspath, url, branch)
+        Git(abspath, url, branch).clone()
         if self._options.get('install-odoo-command', False):
             subprocess.run(['pip', 'install', '-e', abspath, '--no-deps'], check=True)
         print('Odoo {} initialized in {}'.format(branch, abspath))
 
+        potential_errors = []
         for name, conf in self._addons.items():
             print('Initializing {}...'.format(name))
             conf_type = conf['type']
             abspath = os.path.abspath(conf['path'])
             if conf_type == 'git':
-                git_init(abspath, conf['url'], conf.get('branch', None))
-            print('Initialized')
+                git = Git(abspath, conf['url'], conf.get('branch', None), conf.get('freeze', None))
+                returncode = git.clone()
+                if returncode != 0:
+                    potential_errors.append((name, conf))
+
+        if potential_errors:
+            print('Some addons repository cloning seems to have issues')
+            print('Check execution logs for the following:')
+            for name, conf in potential_errors:
+                print(name)
 
         if apply_requirements:
             self.install()
@@ -146,7 +215,6 @@ class Odoons:
             parser.set('options', k, v)
         with open(config_path, 'w+') as configfile:
             parser.write(configfile)
-
 
     def install(self):
         """
@@ -285,10 +353,11 @@ class Odoons:
 
         apply_requirements = 'apply-requirements' in self._options and self._options['apply-requirements']
 
-        git_update(self._odoo['path'], self._odoo['version'])
+        Git(self._odoo['path'], self._odoo.get('url', DEFAULT_ODOO_URL), self._odoo['version']).update()
         for name, conf in self._addons.items():
             if conf['type'] == 'git':
-                git_update(conf['path'], conf.get('branch', 'master'))
+                git = Git(conf['path'], conf['url'], conf.get('branch', None), conf.get('freeze', None))
+                git.update()
 
         if apply_requirements:
             self.install()
