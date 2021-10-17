@@ -17,7 +17,7 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        'PyYAML>=5.1'
+        'ruamel.yaml>=0.15.1'
     ],
     entry_points={
         'console_scripts': ['odoons = odoons.core:main']

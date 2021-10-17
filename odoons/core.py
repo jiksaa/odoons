@@ -1,10 +1,10 @@
 import os
-import yaml
 import shutil
 import argparse
 import subprocess
 from configparser import ConfigParser, ExtendedInterpolation
 
+from ruamel.yaml import YAML
 
 ACTION_INIT = 'init'
 ACTION_INSTALL = 'install'
@@ -75,8 +75,9 @@ class Odoons:
 
     def _load_file(self):
         self.file_path = self._args.file
+        yaml = YAML(typ='safe')
         with open(self.file_path, 'r') as file:
-            self.odoons_file = yaml.load(file, Loader=yaml.FullLoader)
+            self.odoons_file = yaml.load(file)
         if 'odoons' not in self.odoons_file:
             raise Exception('missing odoons section')
         self._odoo = self.odoons_file['odoons']['odoo']
@@ -262,8 +263,10 @@ class Odoons:
                 continue
         odoons_data['odoons']['addons'] = addons
 
+        yaml = YAML(typ='safe')
+        yaml.default_flow_style = False
         with open(self._args.file, 'w') as outfile:
-            yaml.dump(odoons_data, outfile, default_flow_style=False)
+            yaml.dump(odoons_data, outfile)
 
     def update(self):
         """
