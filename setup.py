@@ -12,14 +12,8 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/jiksaa/odoons",
     packages=setuptools.find_packages(),
-    classifiers=[
-        "Programming Language :: Python :: 3"
-    ],
-    python_requires='>=3.6',
-    install_requires=[
-        'ruamel.yaml>=0.15.1'
-    ],
-    entry_points={
-        'console_scripts': ['odoons = odoons.core:main']
-    }
+    classifiers=["Programming Language :: Python :: 3"],
+    python_requires=">=3.6",
+    install_requires=["ruamel.yaml>=0.15.1"],
+    entry_points={"console_scripts": ["odoons = odoons.core:main"]},
 )
