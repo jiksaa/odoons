@@ -223,6 +223,7 @@ class Odoons:
                 printing.warning("No requirements file for {}".format(addons_name))
 
         pip_install(self._odoo["path"], "odoo")
+        pip_install(".", "project root")
         for name, conf in self._addons.items():
             abspath = self.__get_git_addons_path(conf)
             pip_install(abspath, name)
