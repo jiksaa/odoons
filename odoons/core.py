@@ -89,6 +89,25 @@ class Odoons:
         self._reset_parser = self._command_parser.add_parser(ACTION_RESET)
         self._reset_parser.set_defaults(execute=self.reset)
 
+    @staticmethod
+    def __get_git_addons_path(conf):
+        """
+        Static method computing addons path according to the given addons configuration dict()
+
+        `conf` dict is expecting to follow the addons configuration entries structure
+
+        This method mainly handle the standalone option which allows to use Git repository
+        containing a standalone module.
+
+
+        :param conf: addons configuration dict()
+        :return: string representation of addons path
+        """
+        abspath = os.path.abspath(conf["path"])
+        if "standalone" in conf and conf["standalone"]:
+            abspath = os.path.abspath(os.path.join(conf["path"], conf["standalone"]))
+        return abspath
+
     def _load_file(self):
         self.file_path = self._args.file
         yaml = YAML(typ="safe")
@@ -105,9 +124,9 @@ class Odoons:
         abspath = os.path.abspath(self._odoo["path"])
         url = self._odoo.get("url", DEFAULT_ODOO_URL)
         branch = self._odoo["version"]
-        freeze = self._odoo.get("commit", None)
+        commit = self._odoo.get("commit", None)
 
-        Git(abspath, url, branch, freeze).clone()
+        Git(abspath, url, branch, commit).clone()
 
         if self._options.get("install-odoo-command", False):
             printing.info("Installing odoo command...")
@@ -119,13 +138,13 @@ class Odoons:
         for name, conf in self._addons.items():
             printing.info("Initializing {}...".format(name))
             conf_type = conf["type"]
-            abspath = os.path.abspath(conf["path"])
             if conf_type == "git":
+                abspath = self.__get_git_addons_path(conf)
                 git = Git(
                     abspath,
                     conf["url"],
                     conf.get("branch", None),
-                    conf.get("freeze", None),
+                    conf.get("commit", None),
                 )
                 returncode = git.clone()
                 if returncode != 0:
@@ -205,7 +224,8 @@ class Odoons:
 
         pip_install(self._odoo["path"], "odoo")
         for name, conf in self._addons.items():
-            pip_install(conf["path"], name)
+            abspath = self.__get_git_addons_path(conf)
+            pip_install(abspath, name)
 
     @staticmethod
     def _get_config_parser():
@@ -298,38 +318,45 @@ class Odoons:
         addons = {}
         for buildout_addons in buildout_addons_list:
             items = buildout_addons.split(" ")
-            if items[0] == "git" and len(items) >= 4:
+            addons_type, *addons_config = items
+            if addons_type == "git":
                 # [ 'git', URL, PATH, REVISION, [OPTIONS] ]
-                revision = items[3]
-                path = items[2]
-                git_url = items[1]
+                git_url, path, revision, *addons_options = addons_config
                 d = dict({"type": "git", "path": path, "url": git_url})
+                addons_name = os.path.basename(os.path.normpath(path))
 
                 if is_sha1_string(revision):
-                    d.update(freeze=revision)
+                    d.update(commit=revision)
                 else:
                     d.update(branch=revision)
 
                 # Revision has been set apply it
                 if path in revisions_dict:
-                    d["freeze"] = revisions_dict[path]
+                    d["commit"] = revisions_dict[path]
 
                 try:
-                    prefix = "group="
-                    if items[4].startswith(prefix):
-                        d["path"] = os.path.join(d["path"], items[4][len(prefix) :])
-                    print("Unknown addons definition: ", items[4])
+                    for option in addons_options:
+                        prefix = "group="
+                        if option.startswith(prefix):
+                            group_value = option[len(prefix) :]
+                            base_path = os.path.dirname(path)
+                            d["path"] = os.path.join(base_path, group_value)
+                            d["standalone"] = addons_name
+                        else:
+                            printing.warning("Unknown addons options: " + option)
                 except IndexError:
                     pass
-                name = os.path.basename(os.path.normpath(d["path"]))
-                addons[name] = d
+                addons[addons_name] = d
                 continue
-            if items[0] == "local" and len(items) == 2:
+            elif addons_type == "local" and len(addons_config) == 1:
                 # [ 'local', PATH ]
-                d = {"type": "local", "path": items[1]}
+                addons_path = addons_config[0]
+                d = {"type": "local", "path": addons_path}
                 name = os.path.basename(os.path.normpath(d["path"]))
                 addons[name] = d
                 continue
+            else:
+                printing.warning("Unprocessable addons config: {}".format(items))
         odoons_data["odoons"]["addons"] = addons
 
         yaml = YAML(typ="safe")
@@ -354,12 +381,13 @@ class Odoons:
             self._odoo.get("commit", None),
         ).update()
         for name, conf in self._addons.items():
+            abspath = self.__get_git_addons_path(conf)
             if conf["type"] == "git":
                 git = Git(
-                    conf["path"],
+                    abspath,
                     conf["url"],
                     conf.get("branch", None),
-                    conf.get("freeze", None),
+                    conf.get("commit", None),
                 )
                 git.update()
 
@@ -397,13 +425,14 @@ class Odoons:
             try:
                 shutil.rmtree(path)
             except FileNotFoundError:
-                printing.warning("Path {} already deleted".format(path))
+                printing.warning("Path {} seems already deleted".format(path))
 
         odoo_path = os.path.abspath(self._odoo["path"])
         reset_path(odoo_path)
         for name, conf in self._addons.items():
             if conf["type"] == "git":
-                reset_path(os.path.abspath(conf["path"]))
+                abspath = os.path.abspath(conf["path"])
+                reset_path(abspath)
 
     def exec(self, args=None):
         """
