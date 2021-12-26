@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="odoons-jiksaa",
-    version="0.0.4",
+    version="0.0.5",
     author="Jiksaa <Jonathan Beersaerts>",
     description="Odoo addons management tool",
     long_description=long_description,
